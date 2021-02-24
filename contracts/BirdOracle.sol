@@ -28,7 +28,7 @@ contract BirdOracle {
 
     mapping(address => uint256) statusOf; //offchain data provider address => TRUSTED or NOT
     address[] public providers;
-    mapping(address => bool) public providerWas;
+    mapping(address => bool) public providerWas; // used to have only unique providers in providers array
 
     /**
      * Bird Standard API Request
@@ -47,7 +47,7 @@ contract BirdOracle {
         string key;
         uint256 value;
         bool resolved;
-        mapping(uint256 => uint256) response; //specific answer => number of votes of that answer
+        mapping(uint256 => uint256) votesOf; //specific answer => number of votes of that answer
         mapping(address => uint256) statusOf; //offchain data provider address => VOTED or NOT
     }
 
@@ -147,7 +147,7 @@ contract BirdOracle {
     /**
      * called by the Off-Chain oracle to record its answer
      */
-    function updatedChainRequest(uint256 _id, uint256 _valueResponse) public {
+    function updatedChainRequest(uint256 _id, uint256 _response) public {
         BirdRequest storage req = onChainRequests[_id];
 
         require(
@@ -165,12 +165,12 @@ contract BirdOracle {
         );
 
         req.statusOf[msg.sender] = VOTED;
-        uint256 thisAnswerVotes = ++req.response[_valueResponse];
+        uint256 thisAnswerVotes = ++req.votesOf[_response];
 
         if (thisAnswerVotes >= _minConsensus()) {
             req.resolved = true;
-            req.value = _valueResponse;
-            ratingOf[req.ethAddress] = _valueResponse;
+            req.value = _response;
+            ratingOf[req.ethAddress] = _response;
             emit UpdatedRequest(req.id, req.ethAddress, req.key, req.value);
         }
     }
