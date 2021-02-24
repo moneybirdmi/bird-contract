@@ -8,22 +8,17 @@ Bird On-chain Oracle to confirm rating with 50% consensus before update using th
 */
 
 pragma solidity 0.6.12;
-import "./BirdOraclePayment.sol";
+import "./BirdToken.sol";
 
 contract BirdOracle {
     using SafeMath for uint256;
-
-    BirdOraclePayment payment;
-
-    //this contract has alot of $BIRD in it. this contract gives loans to any eth address who calls this func.
-    function getLoan() public {}
 
     BirdRequest[] public onChainRequests; //keep track of list of on-chain
 
     address public owner;
 
     uint256 public minConsensusPercentage = 50; //minimum percentage of consensus before confirmation
-    uint256 public birdNest = 0; // birds in nest count
+    uint256 public birdNest = 0; // birds in nest count // total trusted providers
     uint256 public trackId = 0;
 
     uint8 constant NOT_TRUSTED = 0;
@@ -56,7 +51,7 @@ contract BirdOracle {
         mapping(address => uint256) statusOf; //offchain data provider address => VOTED or NOT
     }
 
-    mapping(address => uint256) private ratings; //saved ratings after consensus
+    mapping(address => uint256) private ratingOf; //saved ratings after consensus
 
     /**
      * Bird Standard API Request
@@ -84,7 +79,7 @@ contract BirdOracle {
 
     modifier paymentApproved {
         require(
-            payment.isApprovedOf(msg.sender),
+            isApproved(msg.sender),
             "Please pay BIRD at OraclePaymentContract"
         );
         _;
@@ -93,14 +88,13 @@ contract BirdOracle {
     constructor(address _birdTokenAddr) public {
         owner = msg.sender;
         birdToken = BirdToken(_birdTokenAddr);
+
         /**
          * Add some TRUSTED oracles in bird nest
          */
         addProvider(0x35fA8692EB10F87D17Cd27fB5488598D33B023E5);
         addProvider(0x58Fd79D34Edc6362f92c6799eE46945113A6EA91);
         addProvider(0x0e4338DFEdA53Bc35467a09Da483410664d34e88);
-
-        payment = BirdOraclePayment(birdOraclePaymentAddr);
     }
 
     function addProvider(address _provider) public onlyOwner {
@@ -125,7 +119,10 @@ contract BirdOracle {
         emit ProviderRemoved(_provider);
     }
 
-    function newChainRequest(address _ethAddress, string memory _key) public {
+    function newChainRequest(address _ethAddress, string memory _key)
+        public
+        paymentApproved
+    {
         onChainRequests.push(
             BirdRequest({
                 id: trackId,
@@ -173,13 +170,9 @@ contract BirdOracle {
         if (thisAnswerVotes >= _minConsensus()) {
             req.resolved = true;
             req.value = _valueResponse;
-            ratings[req.ethAddress] = _valueResponse;
+            ratingOf[req.ethAddress] = _valueResponse;
             emit UpdatedRequest(req.id, req.ethAddress, req.key, req.value);
         }
-    }
-
-    function rewardProviders() public {
-        payment.giveReward(statusOf, providers);
     }
 
     function _minConsensus() private view returns (uint256) {
@@ -193,7 +186,7 @@ contract BirdOracle {
         paymentApproved
         returns (uint256)
     {
-        return ratings[_addr];
+        return ratingOf[_addr];
     }
 
     function getRating() public view returns (uint256) {
@@ -219,11 +212,65 @@ contract BirdOracle {
         }
     }
 
-    function giveReward(address _addr) public view returns (bool) {
+    uint256 lastTimeRewarded = 0;
+
+    function rewardProviders() public {
+        //rewardProviders can be called once in a day
+        uint256 timeAfterRewarded = now - lastTimeRewarded;
+        require(
+            timeAfterRewarded < 24 hours,
+            "You can call reward providers once in 24 hrs"
+        );
+
+        //give 50% BIRD in this contract to owner and 50% to providers
+        uint256 rewardToOwnerPercentage = 50; // 50% reward to owner and rest money to providers
+
+        uint256 balance = birdToken.balanceOf(address(this));
+        uint256 rewardToOwner = balance.mul(rewardToOwnerPercentage).div(100);
+        uint256 rewardToProviders = balance - rewardToOwner;
+
+        uint256 rewardToEachProvider = rewardToProviders.div(birdNest);
+        for (uint256 i = 0; i < providers.length; i++) {
+            if (statusOf[providers[i]] == TRUSTED) {
+                birdToken.transfer(providers[i], rewardToEachProvider);
+            }
+        }
+    }
+
+    function isApproved(address _addr) public view returns (bool) {
         return now < dueDateOf[_addr];
     }
 
-    function isApprovedOf(address _addr) public view returns (bool) {
-        return now < dueDateOf[_addr];
+    mapping(address => uint256) public loanOf;
+    uint256 maxLoanAmount = 100; // max loan at once is 100 Bird
+
+    //this contract has alot of $BIRD in it. this contract gives loans to any eth address who calls this func.
+    function getLoan(uint256 requestedLoanInBird) public {
+        address sender = msg.sender;
+        uint256 minRatingToGetLoan = 50; //50 by 100
+        uint256 thisContractBalance = birdToken.balanceOf(address(this));
+
+        require(
+            ratingOf[sender] >= minRatingToGetLoan,
+            "Your rating should be more than 50/100"
+        );
+        require(loanOf[sender] == 0, "Your have already taken loan");
+        require(
+            maxLoanAmount >= requestedLoanInBird,
+            "You can not take loan more than maxLoanAmount = 100 BIRD"
+        );
+        require(
+            thisContractBalance > requestedLoanInBird,
+            "We have not sufficient funds to allocate you."
+        );
+
+        birdToken.transfer(msg.sender, requestedLoanInBird);
+        loanOf[sender] = requestedLoanInBird;
+    }
+
+    function returnLoan() public {
+        address sender = msg.sender;
+        birdToken.transferFrom(sender, address(this), loanOf[sender]);
+        loanOf[sender] = 0;
     }
 }
