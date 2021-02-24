@@ -78,10 +78,7 @@ contract BirdOracle {
     }
 
     modifier paymentApproved {
-        require(
-            isApproved(msg.sender),
-            "Please pay BIRD at OraclePaymentContract"
-        );
+        require(isApproved(msg.sender), "Please pay BIRD to BirdOracle");
         _;
     }
 
@@ -195,8 +192,8 @@ contract BirdOracle {
 
     BirdToken birdToken;
 
-    uint256 priceToAccessOracle = 1 * 1e18; //rate of 30 days to access data is 1 BIRD
-    mapping(address => uint256) dueDateOf; // who paid the money at whatis his due date. //handle case a person called
+    uint256 public priceToAccessOracle = 1 * 1e18; //rate of 30 days to access data is 1 BIRD
+    mapping(address => uint256) public dueDateOf; // who paid the money at whatis his due date. //handle case a person called
 
     function sendPayment() public {
         address buyer = msg.sender;
@@ -218,7 +215,7 @@ contract BirdOracle {
         //rewardProviders can be called once in a day
         uint256 timeAfterRewarded = now - lastTimeRewarded;
         require(
-            timeAfterRewarded < 24 hours,
+            timeAfterRewarded > 24 hours,
             "You can call reward providers once in 24 hrs"
         );
 
