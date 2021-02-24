@@ -215,7 +215,7 @@ contract BirdOracle {
         //rewardProviders can be called once in a day
         uint256 timeAfterRewarded = now - lastTimeRewarded;
         require(
-            timeAfterRewarded > 24 seconds, //24 hours,
+            timeAfterRewarded > 24 hours,
             "You can call reward providers once in 24 hrs"
         );
 

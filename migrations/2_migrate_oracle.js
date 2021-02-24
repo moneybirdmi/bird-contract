@@ -1,5 +1,7 @@
 const BirdOracle = artifacts.require('BirdOracle');
+const BirdToken = artifacts.require('BirdToken');
 
-module.exports = function (deployer) {
-  deployer.deploy(BirdOracle);
+module.exports = async (deployer) => {
+  await deployer.deploy(BirdToken);
+  await deployer.deploy(BirdOracle, BirdToken.address);
 };
