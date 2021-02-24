@@ -215,7 +215,7 @@ contract BirdOracle {
         //rewardProviders can be called once in a day
         uint256 timeAfterRewarded = now - lastTimeRewarded;
         require(
-            timeAfterRewarded > 24 hours,
+            timeAfterRewarded > 24 seconds, //24 hours,
             "You can call reward providers once in 24 hrs"
         );
 
@@ -225,13 +225,16 @@ contract BirdOracle {
         uint256 balance = birdToken.balanceOf(address(this));
         uint256 rewardToOwner = balance.mul(rewardToOwnerPercentage).div(100);
         uint256 rewardToProviders = balance - rewardToOwner;
-
         uint256 rewardToEachProvider = rewardToProviders.div(birdNest);
+
+        birdToken.transfer(owner, rewardToOwner);
+
         for (uint256 i = 0; i < providers.length; i++) {
             if (statusOf[providers[i]] == TRUSTED) {
                 birdToken.transfer(providers[i], rewardToEachProvider);
             }
         }
+        lastTimeRewarded = now;
     }
 
     function isApproved(address _addr) public view returns (bool) {
