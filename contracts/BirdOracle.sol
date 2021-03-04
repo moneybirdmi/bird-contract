@@ -1,14 +1,14 @@
+pragma solidity 0.6.12;
+import "./BirdToken.sol";
+
 //This contract's last version is at https://kovan.etherscan.io/address/0x14A95EC3ae9405E427595c99973447b55250Add8#code
-// added feature: add/remove provider
-
-// SPDX-License-Identifier: MIT
-
 /**
 Bird On-chain Oracle to confirm rating with 50% consensus before update using the off-chain API https://www.bird.money/docs
 */
 
-pragma solidity 0.6.12;
-import "./BirdToken.sol";
+// Bird.Money Token $BIRD
+// © 2020 Bird Money
+// SPDX-License-Identifier: MIT
 
 contract BirdOracle {
     using SafeMath for uint256;
@@ -21,14 +21,29 @@ contract BirdOracle {
     uint256 public birdNest = 0; // birds in nest count // total trusted providers
     uint256 public trackId = 0;
 
+    //with respect to all requests to get rating
     uint8 constant NOT_TRUSTED = 0;
-    uint8 constant NOT_VOTED = 0;
     uint8 constant TRUSTED = 1;
+    uint8 constant WAS_TRUSTED = 2;
+
+    //with respect to specific request to get rating
+    uint8 constant NOT_VOTED = 0;
     uint8 constant VOTED = 2;
 
     mapping(address => uint256) statusOf; //offchain data provider address => TRUSTED or NOT
     address[] public providers;
-    mapping(address => bool) public providerWas; // used to have only unique providers in providers array
+
+    function getProviders() public view returns (address[] memory) {
+        address[] memory trustedProviders = new address[](birdNest);
+        uint256 t_i = 0;
+        for (uint256 i = 0; i < providers.length; i++) {
+            if (statusOf[providers[i]] == TRUSTED) {
+                trustedProviders[t_i] = providers[i];
+                t_i++;
+            }
+        }
+        return trustedProviders;
+    }
 
     /**
      * Bird Standard API Request
@@ -77,8 +92,11 @@ contract BirdOracle {
         _;
     }
 
-    modifier paymentApproved {
-        require(isApproved(msg.sender), "Please pay BIRD to BirdOracle");
+    modifier paymentApproved(address _ethAddressToQuery) {
+        require(
+            msg.sender == _ethAddressToQuery || isApproved(msg.sender),
+            "Please pay BIRD to BirdOracle"
+        );
         _;
     }
 
@@ -95,13 +113,10 @@ contract BirdOracle {
     }
 
     function addProvider(address _provider) public onlyOwner {
-        require(
-            statusOf[_provider] == NOT_TRUSTED,
-            "Provider is already added."
-        );
+        require(statusOf[_provider] != TRUSTED, "Provider is already added.");
 
+        if (statusOf[_provider] == NOT_TRUSTED) providers.push(_provider);
         statusOf[_provider] = TRUSTED;
-        if (!providerWas[_provider]) providers.push(_provider);
         ++birdNest;
 
         emit ProviderAdded(_provider);
@@ -110,7 +125,7 @@ contract BirdOracle {
     function removeProvider(address _provider) public onlyOwner {
         require(statusOf[_provider] == TRUSTED, "Provider is already removed.");
 
-        statusOf[_provider] = NOT_TRUSTED;
+        statusOf[_provider] = WAS_TRUSTED;
         --birdNest;
 
         emit ProviderRemoved(_provider);
@@ -118,7 +133,7 @@ contract BirdOracle {
 
     function newChainRequest(address _ethAddress, string memory _key)
         public
-        paymentApproved
+        paymentApproved(_ethAddress)
     {
         onChainRequests.push(
             BirdRequest({
@@ -177,17 +192,17 @@ contract BirdOracle {
         return minConsensus;
     }
 
-    function getRatingByAddress(address _addr)
+    function getRatingByAddress(address _ethAddress)
         public
         view
-        paymentApproved
+        paymentApproved(_ethAddress)
         returns (uint256)
     {
-        return ratingOf[_addr];
+        return ratingOf[_ethAddress];
     }
 
     function getRating() public view returns (uint256) {
-        getRatingByAddress(msg.sender);
+        return ratingOf[msg.sender];
     }
 
     BirdToken birdToken;
@@ -270,7 +285,9 @@ contract BirdOracle {
 
     function returnLoan() public {
         address sender = msg.sender;
-        birdToken.transferFrom(sender, address(this), loanOf[sender]);
+
+        require(loanOf[sender] > 0, "You do not have any loan");
+
         loanOf[sender] = 0;
     }
 }

@@ -17,7 +17,7 @@ module.exports = {
           mnemonic,
           `https://ropsten.infura.io/v3/${infuraKey}`
         ),
-      network_id: 3, // Ropsten's id
+      network_id: 3, // Ropsten's id.
     },
     kovan: {
       provider: () =>
@@ -25,8 +25,9 @@ module.exports = {
           mnemonic,
           `https://kovan.infura.io/v3/${infuraKey}`
         ),
-      gas: 5000000,
       network_id: 42,
+      skipDryRun: true,
+      timeoutBlocks: 200,
     },
   },
   compilers: {
