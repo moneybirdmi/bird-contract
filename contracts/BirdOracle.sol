@@ -1,14 +1,68 @@
 pragma solidity 0.6.12;
-import "./BirdToken.sol";
 
-//This contract's last version is at https://kovan.etherscan.io/address/0x14A95EC3ae9405E427595c99973447b55250Add8#code
 /**
 Bird On-chain Oracle to confirm rating with 50% consensus before update using the off-chain API https://www.bird.money/docs
 */
 
-// Bird.Money Token $BIRD
 // © 2020 Bird Money
 // SPDX-License-Identifier: MIT
+
+library SafeMath {
+    function div(uint256 a, uint256 b) internal pure returns (uint256) {
+        return div(a, b, "SafeMath: division by zero");
+    }
+
+    function div(
+        uint256 a,
+        uint256 b,
+        string memory errorMessage
+    ) internal pure returns (uint256) {
+        require(b > 0, errorMessage);
+        uint256 c = a / b;
+        return c;
+    }
+
+    function mul(uint256 a, uint256 b) internal pure returns (uint256) {
+        if (a == 0) {
+            return 0;
+        }
+
+        uint256 c = a * b;
+        require(c / a == b, "SafeMath: multiplication overflow");
+
+        return c;
+    }
+}
+
+interface IERC20 {
+    function totalSupply() external view returns (uint256);
+
+    function balanceOf(address account) external view returns (uint256);
+
+    function transfer(address recipient, uint256 amount)
+        external
+        returns (bool);
+
+    function allowance(address owner, address spender)
+        external
+        view
+        returns (uint256);
+
+    function approve(address spender, uint256 amount) external returns (bool);
+
+    function transferFrom(
+        address sender,
+        address recipient,
+        uint256 amount
+    ) external returns (bool);
+
+    event Transfer(address indexed from, address indexed to, uint256 value);
+    event Approval(
+        address indexed owner,
+        address indexed spender,
+        uint256 value
+    );
+}
 
 contract BirdOracle {
     using SafeMath for uint256;
@@ -21,29 +75,17 @@ contract BirdOracle {
     uint256 public birdNest = 0; // birds in nest count // total trusted providers
     uint256 public trackId = 0;
 
-    //with respect to all requests to get rating
+    address[] public providers; //offchain oracle nodes
+    mapping(address => uint256) statusOf; //offchain data provider address => TRUSTED or NOT
+
+    //status of providers with respect to all requests
     uint8 constant NOT_TRUSTED = 0;
     uint8 constant TRUSTED = 1;
     uint8 constant WAS_TRUSTED = 2;
 
-    //with respect to specific request to get rating
+    //status of with respect to individual request
     uint8 constant NOT_VOTED = 0;
     uint8 constant VOTED = 2;
-
-    mapping(address => uint256) statusOf; //offchain data provider address => TRUSTED or NOT
-    address[] public providers;
-
-    function getProviders() public view returns (address[] memory) {
-        address[] memory trustedProviders = new address[](birdNest);
-        uint256 t_i = 0;
-        for (uint256 i = 0; i < providers.length; i++) {
-            if (statusOf[providers[i]] == TRUSTED) {
-                trustedProviders[t_i] = providers[i];
-                t_i++;
-            }
-        }
-        return trustedProviders;
-    }
 
     /**
      * Bird Standard API Request
@@ -52,8 +94,8 @@ contract BirdOracle {
      * key: "bird_rating"
      * value: 400000000000000000   // 4.0
      * resolved: true / false
-     * response: 000000010000=> 2  (specific answer => number of votes of that answer)
-     * nest: approved off-chain oracles nest/addresses and keep track of vote (1= TRUSTED and not voted, 2=voted)
+     * votesOf: 000000010000=> 2  (specific answer => number of votes of that answer)
+     * statusOf: 0xcf021.. => VOTED
      */
 
     struct BirdRequest {
@@ -66,7 +108,7 @@ contract BirdOracle {
         mapping(address => uint256) statusOf; //offchain data provider address => VOTED or NOT
     }
 
-    mapping(address => uint256) private ratingOf; //saved ratings after consensus
+    mapping(address => uint256) private ratingOf; //saved ratings of eth addresses after consensus
 
     /**
      * Bird Standard API Request
@@ -102,14 +144,7 @@ contract BirdOracle {
 
     constructor(address _birdTokenAddr) public {
         owner = msg.sender;
-        birdToken = BirdToken(_birdTokenAddr);
-
-        /**
-         * Add some TRUSTED oracles in bird nest
-         */
-        addProvider(0x35fA8692EB10F87D17Cd27fB5488598D33B023E5);
-        addProvider(0x58Fd79D34Edc6362f92c6799eE46945113A6EA91);
-        addProvider(0x0e4338DFEdA53Bc35467a09Da483410664d34e88);
+        birdToken = IERC20(_birdTokenAddr);
     }
 
     function addProvider(address _provider) public onlyOwner {
@@ -205,7 +240,20 @@ contract BirdOracle {
         return ratingOf[msg.sender];
     }
 
-    BirdToken birdToken;
+    //get trusted providers
+    function getProviders() public view returns (address[] memory) {
+        address[] memory trustedProviders = new address[](birdNest);
+        uint256 t_i = 0;
+        for (uint256 i = 0; i < providers.length; i++) {
+            if (statusOf[providers[i]] == TRUSTED) {
+                trustedProviders[t_i] = providers[i];
+                t_i++;
+            }
+        }
+        return trustedProviders;
+    }
+
+    IERC20 public birdToken;
 
     uint256 public priceToAccessOracle = 1 * 1e18; //rate of 30 days to access data is 1 BIRD
     mapping(address => uint256) public dueDateOf; // who paid the money at whatis his due date. //handle case a person called
@@ -254,40 +302,5 @@ contract BirdOracle {
 
     function isApproved(address _addr) public view returns (bool) {
         return now < dueDateOf[_addr];
-    }
-
-    mapping(address => uint256) public loanOf;
-    uint256 maxLoanAmount = 100; // max loan at once is 100 Bird
-
-    //this contract has alot of $BIRD in it. this contract gives loans to any eth address who calls this func.
-    function getLoan(uint256 requestedLoanInBird) public {
-        address sender = msg.sender;
-        uint256 minRatingToGetLoan = 50; //50 by 100
-        uint256 thisContractBalance = birdToken.balanceOf(address(this));
-
-        require(
-            ratingOf[sender] >= minRatingToGetLoan,
-            "Your rating should be more than 50/100"
-        );
-        require(loanOf[sender] == 0, "Your have already taken loan");
-        require(
-            maxLoanAmount >= requestedLoanInBird,
-            "You can not take loan more than maxLoanAmount = 100 BIRD"
-        );
-        require(
-            thisContractBalance > requestedLoanInBird,
-            "We have not sufficient funds to allocate you."
-        );
-
-        birdToken.transfer(msg.sender, requestedLoanInBird);
-        loanOf[sender] = requestedLoanInBird;
-    }
-
-    function returnLoan() public {
-        address sender = msg.sender;
-
-        require(loanOf[sender] > 0, "You do not have any loan");
-
-        loanOf[sender] = 0;
     }
 }

@@ -7,7 +7,6 @@
     "test": "test"
   },
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
     "deploy": "truffle migrate --network kovan && truffle run verify BirdToken BirdOracle --network kovan"
   },
   "repository": {

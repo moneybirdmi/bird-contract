@@ -19,6 +19,7 @@ module.exports = {
         ),
       network_id: 3, // Ropsten's id.
     },
+
     kovan: {
       provider: () =>
         new HDWalletProvider(
