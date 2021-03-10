@@ -7,7 +7,7 @@
     "test": "test"
   },
   "scripts": {
-    "deploy": "truffle migrate --network kovan && truffle run verify BirdToken BirdOracle --network kovan"
+    "deploy": "truffle migrate --network kovan --reset && truffle run verify BirdToken BirdOracle --network kovan"
   },
   "repository": {
     "type": "git",
