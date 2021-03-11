@@ -6,74 +6,18 @@ Bird On-chain Oracle to confirm rating with 50% consensus before update using th
 
 // © 2020 Bird Money
 // SPDX-License-Identifier: MIT
+import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "@openzeppelin/contracts/access/Ownable.sol";
+import "@openzeppelin/contracts/math/SafeMath.sol";
 
-library SafeMath {
-    function div(uint256 a, uint256 b) internal pure returns (uint256) {
-        return div(a, b, "SafeMath: division by zero");
-    }
-
-    function div(
-        uint256 a,
-        uint256 b,
-        string memory errorMessage
-    ) internal pure returns (uint256) {
-        require(b > 0, errorMessage);
-        uint256 c = a / b;
-        return c;
-    }
-
-    function mul(uint256 a, uint256 b) internal pure returns (uint256) {
-        if (a == 0) {
-            return 0;
-        }
-
-        uint256 c = a * b;
-        require(c / a == b, "SafeMath: multiplication overflow");
-
-        return c;
-    }
-}
-
-interface IERC20 {
-    function totalSupply() external view returns (uint256);
-
-    function balanceOf(address account) external view returns (uint256);
-
-    function transfer(address recipient, uint256 amount)
-        external
-        returns (bool);
-
-    function allowance(address owner, address spender)
-        external
-        view
-        returns (uint256);
-
-    function approve(address spender, uint256 amount) external returns (bool);
-
-    function transferFrom(
-        address sender,
-        address recipient,
-        uint256 amount
-    ) external returns (bool);
-
-    event Transfer(address indexed from, address indexed to, uint256 value);
-    event Approval(
-        address indexed owner,
-        address indexed spender,
-        uint256 value
-    );
-}
-
-contract BirdOracle {
+contract BirdOracle is Ownable {
     using SafeMath for uint256;
 
     BirdRequest[] public onChainRequests; //keep track of list of on-chain
 
-    address public owner;
-
-    uint256 public minConsensusPercentage = 50; //minimum percentage of consensus before confirmation
-    uint256 public birdNest = 0; // birds in nest count // total trusted providers
-    uint256 public trackId = 0;
+    uint256 public minConsensus = 2; //minimum votes on an answer before confirmation
+    uint256 public birdNest = 0; // birds in nest count i.e total trusted providers
+    uint256 public trackId = 0; //current request id
 
     address[] public providers; //offchain oracle nodes
     mapping(address => uint256) statusOf; //offchain data provider address => TRUSTED or NOT
@@ -110,15 +54,10 @@ contract BirdOracle {
 
     mapping(address => uint256) private ratingOf; //saved ratings of eth addresses after consensus
 
-    /**
-     * Bird Standard API Request
-     * Off-Chain-Request from outside the blockchain
-     */
+    // Bird Standard API Request Off-Chain-Request from outside the blockchain
     event OffChainRequest(uint256 id, address ethAddress, string key);
 
-    /**
-     * To call when there is consensus on final result
-     */
+    // To call when there is consensus on final result
     event UpdatedRequest(
         uint256 id,
         address ethAddress,
@@ -129,11 +68,6 @@ contract BirdOracle {
     event ProviderAdded(address provider);
     event ProviderRemoved(address provider);
 
-    modifier onlyOwner {
-        require(msg.sender == owner, "Owner can call this function");
-        _;
-    }
-
     modifier paymentApproved(address _ethAddressToQuery) {
         require(
             msg.sender == _ethAddressToQuery || isApproved(msg.sender),
@@ -143,7 +77,6 @@ contract BirdOracle {
     }
 
     constructor(address _birdTokenAddr) public {
-        owner = msg.sender;
         birdToken = IERC20(_birdTokenAddr);
     }
 
@@ -180,20 +113,14 @@ contract BirdOracle {
             })
         );
 
-        /**
-         * Off-Chain event trigger
-         */
+        //Off-Chain event trigger
         emit OffChainRequest(trackId, _ethAddress, _key);
 
-        /**
-         * update total number of requests
-         */
+        //update total number of requests
         trackId++;
     }
 
-    /**
-     * called by the Off-Chain oracle to record its answer
-     */
+    //called by the Off-Chain oracle to record its answer
     function updatedChainRequest(uint256 _id, uint256 _response) public {
         BirdRequest storage req = onChainRequests[_id];
 
@@ -214,17 +141,12 @@ contract BirdOracle {
         req.statusOf[msg.sender] = VOTED;
         uint256 thisAnswerVotes = ++req.votesOf[_response];
 
-        if (thisAnswerVotes >= _minConsensus()) {
+        if (thisAnswerVotes >= minConsensus) {
             req.resolved = true;
             req.value = _response;
             ratingOf[req.ethAddress] = _response;
             emit UpdatedRequest(req.id, req.ethAddress, req.key, req.value);
         }
-    }
-
-    function _minConsensus() private view returns (uint256) {
-        uint256 minConsensus = birdNest.mul(minConsensusPercentage).div(100);
-        return minConsensus;
     }
 
     function getRatingByAddress(address _ethAddress)
@@ -255,9 +177,10 @@ contract BirdOracle {
 
     IERC20 public birdToken;
 
-    uint256 public priceToAccessOracle = 1 * 1e18; //rate of 30 days to access data is 1 BIRD
-    mapping(address => uint256) public dueDateOf; // who paid the money at whatis his due date. //handle case a person called
+    uint256 public priceToAccessOracle = 1 * 1e18; // rate of 30 days to access data is 1 BIRD
+    mapping(address => uint256) public dueDateOf; // person/contract address => due date to pay for reading ratings
 
+    //send payment to oracle to get facility to create requests and read ratings
     function sendPayment() public {
         address buyer = msg.sender;
         birdToken.transferFrom(buyer, address(this), priceToAccessOracle); // charge money from sender if he wants to access our oracle
@@ -290,17 +213,20 @@ contract BirdOracle {
         uint256 rewardToProviders = balance - rewardToOwner;
         uint256 rewardToEachProvider = rewardToProviders.div(birdNest);
 
-        birdToken.transfer(owner, rewardToOwner);
+        birdToken.transfer(owner(), rewardToOwner);
 
-        for (uint256 i = 0; i < providers.length; i++) {
-            if (statusOf[providers[i]] == TRUSTED) {
+        for (uint256 i = 0; i < providers.length; i++)
+            if (statusOf[providers[i]] == TRUSTED)
                 birdToken.transfer(providers[i], rewardToEachProvider);
-            }
-        }
+
         lastTimeRewarded = now;
     }
 
     function isApproved(address _addr) public view returns (bool) {
         return now < dueDateOf[_addr];
+    }
+
+    function setMinConsensus(uint256 _minConsensus) public onlyOwner {
+        minConsensus = _minConsensus;
     }
 }
