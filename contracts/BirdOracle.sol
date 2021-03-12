@@ -70,7 +70,7 @@ contract BirdOracle is Ownable {
 
     modifier paymentApproved(address _ethAddressToQuery) {
         require(
-            msg.sender == _ethAddressToQuery || isApproved(msg.sender),
+            msg.sender == _ethAddressToQuery || isApproved(),
             "Please pay BIRD to BirdOracle"
         );
         _;
@@ -186,12 +186,11 @@ contract BirdOracle is Ownable {
         birdToken.transferFrom(buyer, address(this), priceToAccessOracle); // charge money from sender if he wants to access our oracle
 
         uint256 dueDate = dueDateOf[buyer];
-        uint256 next30Days = now + 30 days;
 
-        if (dueDate > now && dueDate < next30Days) {
-            dueDateOf[buyer] = dueDate + next30Days;
+        if (now < dueDate) {
+            dueDateOf[buyer] = dueDate + 30 days;
         } else {
-            dueDateOf[buyer] = now + next30Days;
+            dueDateOf[buyer] = now + 30 days;
         }
     }
 
@@ -226,7 +225,23 @@ contract BirdOracle is Ownable {
         return now < dueDateOf[_addr];
     }
 
+    function isApproved() public view returns (bool) {
+        return now < dueDateOf[msg.sender];
+    }
+
     function setMinConsensus(uint256 _minConsensus) public onlyOwner {
         minConsensus = _minConsensus;
+    }
+
+    function time() public view returns (uint256) {
+        return now;
+    }
+
+    function time1() public view returns (uint256) {
+        return 30 days;
+    }
+
+    function time2() public view returns (uint256) {
+        return now + 30 days;
     }
 }

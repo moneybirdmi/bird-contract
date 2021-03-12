@@ -7,7 +7,7 @@
     "test": "test"
   },
   "scripts": {
-    "deploy": "truffle migrate --network kovan --reset && truffle run verify BirdOracle --network kovan"
+    "migrate": "truffle migrate --network kovan --reset && truffle run verify BirdOracle --network kovan"
   },
   "repository": {
     "type": "git",
@@ -22,9 +22,8 @@
   "homepage": "https://github.com/moneybirdmi/bird-contract#readme",
   "dependencies": {
     "@openzeppelin/contracts": "^3.1.0",
-    "@truffle/hdwallet-provider": "^1.2.2"
-  },
-  "devDependencies": {
+    "@openzeppelin/test-helpers": "^0.5.10",
+    "@truffle/hdwallet-provider": "^1.2.2",
     "truffle-plugin-verify": "^0.5.4"
   }
 }

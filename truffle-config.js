@@ -27,11 +27,12 @@ module.exports = {
           `https://kovan.infura.io/v3/${infuraKey}`
         ),
       network_id: 42,
-      //skipDryRun: true,
-      // // gas: 5500000,
-      // // gasPrice: 550000,
+      // skipDryRun: true,
+      // networkCheckTimeout: 999999,
+      // gas: 5500000,
+      // gasPrice: 550000,
       // confirmations: 2,
-      // timeoutBlocks: 200,
+      // timeoutBlocks: 20000,
     },
   },
   compilers: {
