@@ -232,16 +232,4 @@ contract BirdOracle is Ownable {
     function setMinConsensus(uint256 _minConsensus) public onlyOwner {
         minConsensus = _minConsensus;
     }
-
-    function time() public view returns (uint256) {
-        return now;
-    }
-
-    function time1() public view returns (uint256) {
-        return 30 days;
-    }
-
-    function time2() public view returns (uint256) {
-        return now + 30 days;
-    }
 }
