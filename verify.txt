@@ -1,0 +1,6 @@
+
+BirdToken: https://kovan.etherscan.io/address/0xee426697da6885e7c8c0d48255de85ac412dd7b9#code
+BirdToken: 0xee426697da6885e7c8c0d48255de85ac412dd7b9
+
+BirdOracle: https://kovan.etherscan.io/address/0xd666840ecd7c643f7bf441e6cbbd0bc91588737a#code
+BirdOracle: 0xd666840ecd7c643f7bf441e6cbbd0bc91588737a

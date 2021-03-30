@@ -185,7 +185,7 @@ contract BirdOracle is Ownable {
         rewardToken.transferFrom(msg.sender, address(this), _amount);
     }
 
-    //get tokens from contract back to owner
+    //get tokens from contract back to owner. avoids locking of funds in contract.
     function withdrawRewardTokens(uint256 _amount) public onlyOwner {
         rewardToken.transfer(msg.sender, _amount);
     }

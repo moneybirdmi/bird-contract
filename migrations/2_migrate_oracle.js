@@ -14,6 +14,12 @@ const kovanDeployScript = async (deployer) => {
   const birdTokenAddress = '0xee426697da6885e7c8c0d48255de85ac412dd7b9';
   await deployer.deploy(BirdOracle, birdTokenAddress);
 };
+
+const mainnetDeployScript = async (deployer) => {
+  console.log('Deploying to mainnet');
+  const usdtAddress = '0xdac17f958d2ee523a2206206994597c13d831ec7';
+  await deployer.deploy(BirdOracle, usdtAddress);
+};
 module.exports = async (deployer, network) => {
   switch (network) {
     case 'development':
@@ -23,6 +29,10 @@ module.exports = async (deployer, network) => {
 
     case 'kovan':
       kovanDeployScript(deployer);
+      break;
+
+    case 'mainnet':
+      mainnetDeployScript(deployer);
       break;
 
     default:
