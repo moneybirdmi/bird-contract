@@ -1,7 +1,7 @@
 pragma solidity 0.6.12;
 
 /**
-Bird On-chain Oracle to confirm rating with 50% consensus before update using the off-chain API https://www.bird.money/docs
+Bird On-chain Oracle to confirm rating with consensus before update using the off-chain API https://www.bird.money/docs
 */
 
 // © 2020 Bird Money
@@ -68,16 +68,8 @@ contract BirdOracle is Ownable {
     event ProviderAdded(address provider);
     event ProviderRemoved(address provider);
 
-    modifier paymentApproved(address _ethAddressToQuery) {
-        require(
-            msg.sender == _ethAddressToQuery || isApproved(),
-            "Please pay BIRD to BirdOracle"
-        );
-        _;
-    }
-
-    constructor(address _birdTokenAddr) public {
-        birdToken = IERC20(_birdTokenAddr);
+    constructor(IERC20 _rewardToken) public {
+        rewardToken = _rewardToken;
     }
 
     function addProvider(address _provider) public onlyOwner {
@@ -99,10 +91,7 @@ contract BirdOracle is Ownable {
         emit ProviderRemoved(_provider);
     }
 
-    function newChainRequest(address _ethAddress, string memory _key)
-        public
-        paymentApproved(_ethAddress)
-    {
+    function newChainRequest(address _ethAddress, string memory _key) public {
         onChainRequests.push(
             BirdRequest({
                 id: trackId,
@@ -149,13 +138,8 @@ contract BirdOracle is Ownable {
         }
     }
 
-    function getRatingByAddress(address _ethAddress)
-        public
-        view
-        paymentApproved(_ethAddress)
-        returns (uint256)
-    {
-        return ratingOf[_ethAddress];
+    function getRatingByAddress(address _user) public view returns (uint256) {
+        return ratingOf[_user];
     }
 
     function getRating() public view returns (uint256) {
@@ -175,61 +159,34 @@ contract BirdOracle is Ownable {
         return trustedProviders;
     }
 
-    IERC20 public birdToken;
-
-    uint256 public priceToAccessOracle = 1 * 1e18; // rate of 30 days to access data is 1 BIRD
-    mapping(address => uint256) public dueDateOf; // person/contract address => due date to pay for reading ratings
-
-    //send payment to oracle to get facility to create requests and read ratings
-    function sendPayment() public {
-        address buyer = msg.sender;
-        birdToken.transferFrom(buyer, address(this), priceToAccessOracle); // charge money from sender if he wants to access our oracle
-
-        uint256 dueDate = dueDateOf[buyer];
-
-        if (now < dueDate) {
-            dueDateOf[buyer] = dueDate + 30 days;
-        } else {
-            dueDateOf[buyer] = now + 30 days;
-        }
+    //set minimum amount of answers needed to accept an answer
+    function setMinConsensus(uint256 _minConsensus) public onlyOwner {
+        minConsensus = _minConsensus;
     }
 
-    uint256 lastTimeRewarded = 0;
+    IERC20 public rewardToken;
 
-    function rewardProviders() public {
-        //rewardProviders can be called once in a day
-        uint256 timeAfterRewarded = now - lastTimeRewarded;
-        require(
-            timeAfterRewarded > 24 hours,
-            "You can call reward providers once in 24 hrs"
-        );
+    //change reward token
+    function setRewardToken(IERC20 _rewardToken) public onlyOwner {
+        rewardToken = _rewardToken;
+    }
 
-        //give 50% BIRD in this contract to owner and 50% to providers
-        uint256 rewardToOwnerPercentage = 50; // 50% reward to owner and rest money to providers
-
-        uint256 balance = birdToken.balanceOf(address(this));
-        uint256 rewardToOwner = balance.mul(rewardToOwnerPercentage).div(100);
-        uint256 rewardToProviders = balance - rewardToOwner;
-        uint256 rewardToEachProvider = rewardToProviders.div(birdNest);
-
-        birdToken.transfer(owner(), rewardToOwner);
+    //any amount admin gives. it is distributed to all node providers equally.
+    function rewardProviders(uint256 _amount) public onlyOwner {
+        uint256 rewardToEachProvider = _amount.div(birdNest);
 
         for (uint256 i = 0; i < providers.length; i++)
             if (statusOf[providers[i]] == TRUSTED)
-                birdToken.transfer(providers[i], rewardToEachProvider);
-
-        lastTimeRewarded = now;
+                rewardToken.transfer(providers[i], rewardToEachProvider);
     }
 
-    function isApproved(address _addr) public view returns (bool) {
-        return now < dueDateOf[_addr];
+    //send tokens to contract. So that it can distributed to node providers.
+    function depositRewardTokens(uint256 _amount) public onlyOwner {
+        rewardToken.transferFrom(msg.sender, address(this), _amount);
     }
 
-    function isApproved() public view returns (bool) {
-        return now < dueDateOf[msg.sender];
-    }
-
-    function setMinConsensus(uint256 _minConsensus) public onlyOwner {
-        minConsensus = _minConsensus;
+    //get tokens from contract back to owner
+    function withdrawRewardTokens(uint256 _amount) public onlyOwner {
+        rewardToken.transfer(msg.sender, _amount);
     }
 }
